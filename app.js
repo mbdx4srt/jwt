@@ -1,12 +1,27 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
-const { User } = require("./db");
-const { generateAccessToken, verifyToken } = require("./auth")
+const {User} = require("./db");
+const {generateAccessToken, verifyToken} = require("./auth")
+const {Counter} = require("./counter")
 const app = express();
 require("dotenv").config();
 
 console.log(process.env.JWT_SECRET);
 app.use(express.json());
+
+const session = require("express-session");
+const sessionSettings = {
+    secret: process.env.JWT_SECRET,
+    resave: false,
+    saveUninitialized: true,
+};
+app.use(session(sessionSettings));
+
+app.use((req, res, next) => {
+    Counter.lookup[req.session.id] =
+        Counter.lookup[req.session.id] || new Counter(req.session.id);
+    next();
+});
 
 async function verifyUser(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -43,16 +58,20 @@ app.post("/login", verifyUser, async (req, res) => {
 });
 
 app.post("/users", async (req, res) => {
-    const { username, password } = req.body;
+    const {username, password} = req.body;
     console.log(username, password)
     const passwordHash = await bcrypt.hash(password, 10);
-    await User.create({ username, passwordHash });
+    await User.create({username, passwordHash});
     res.sendStatus(201);
 });
 
-app.get("/greeting", verifyToken,  (req, res) => {
+app.get("/greeting", verifyToken, (req, res) => {
     res.send("Hello " + req.userId)
-    console.log( req.userId)
+    console.log(req.userId)
 });
 
 module.exports = app;
+
+app.get("/counter", verifyToken, (req, res) => {
+    res.send(Counter.lookup[req.session.id].inc());
+});
